@@ -1,0 +1,26 @@
+We need Go compiler for running and building our API. So we hope Go, MySQL server are installed in your system. If not on Ubuntu14.04 machine you can do this
+
+$ sudo add-apt-repository ppa:gophers/go
+$ sudo apt-get update
+$ sudo apt-get install golang-stable
+$ sudo apt-get install mysql-server
+
+Now set the $GOPATH variable creating a new folder in your home. $GOPATH is where your external packages and libraries are stored. My ~/.bashrc looks like this.
+
+export GOPATH=/home/naren/mygo
+export PATH=$PATH::/usr/local/go/bin
+export PATH=$PATH:$GOPATH/bin
+
+Now we are ready with setup. Let us install dependencies.
+
+$ go get "github.com/go-sql-driver/mysql"
+$ go get "github.com/gin-gonic/gin"
+
+Now we have everything to proceed. For development chose your favorite text editor. My favorites are both Atom and Sublime Text 3. Both have very good tooling for Go.
+
+A basic REST API has these four important methods.
+
+1. GET
+2. POST
+3. PUT
+4. DELETE
