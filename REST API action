@@ -1,0 +1,13 @@
+REST API in action
+Now build the program and run it.
+$ go build gitter.go
+$ ./gitter
+API server will be running on http://localhost:3000
+Get all persons
+Get user with id = 28
+Change name from "Sagar Juthuga" to "Sagar Kumar"
+Delete user Vinay from persons list
+You can actually observe the terminal where API server is running to get time taken by requests, type of request etc.
+There are more things we need to implement to make it usable.
+Logging
+Authentication
