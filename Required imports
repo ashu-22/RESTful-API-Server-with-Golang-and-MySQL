@@ -1,0 +1,18 @@
+Required imports
+import (
+	"bytes"
+	"database/sql"
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+)
+view raw
+imports.go hosted with ❤ by GitHub
+
+Imports on line no's 3, 5, 7, 8 are functional requirements. Remaining imports are utilities which are helpful in course of time. sql-driver and martini are essential for our API.
+
+First create a database called "gotest" in your MySQL shell.
+
+CREATE DATABASE gotest
