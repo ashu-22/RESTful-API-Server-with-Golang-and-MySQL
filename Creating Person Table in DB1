@@ -1,0 +1,353 @@
+Now person table looks like this
+
+Gin is a very simple HTTP framework for writing application servers.
+
+Now we can jump into the actual development of API server. We can first create a bare structure of our main program.
+package main
+
+import (
+	"bytes"
+	"database/sql"
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+)
+
+func main() {
+	db, err := sql.Open("mysql", "root:passapp@tcp(127.0.0.1:3306)/gotest")
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+	defer db.Close()
+	// make sure connection is available
+	err = db.Ping()
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+	type Person struct {
+		Id         int
+		First_Name string
+		Last_Name  string
+	}
+	router := gin.Default()
+	// Add API handlers here
+	router.Run(":3000")
+}
+view raw
+base.go hosted with ❤ by GitHub
+
+In every gin app, we should create a Default or New gin router
+
+router := gin.Default()
+
+We can specify :port on which our Gin applications run using
+
+router.Run(":3000") // server runs on 3000 port
+
+We are creating a struct called Person to map with Person table in DB. We actually use these structs to receive data at the time of fetching records from DB.
+
+In Gin, we can attach handler functions to a particular URL. It is called URL routing. So let me add a simple GET handler to the main function.
+	// GET a person detail
+	router.GET("/person/:id", func(c *gin.Context) {
+		var (
+			person Person
+			result gin.H
+		)
+		id := c.Param("id")
+		row := db.QueryRow("select id, first_name, last_name from person where id = ?;", id)
+		err = row.Scan(&person.Id, &person.First_Name, &person.Last_Name)
+		if err != nil {
+			// If no results send null
+			result = gin.H{
+				"result": nil,
+				"count":  0,
+			}
+		} else {
+			result = gin.H{
+				"result": person,
+				"count":  1,
+			}
+		}
+		c.JSON(http.StatusOK, result)
+	})
+view raw
+GET_person.go hosted with ❤ by GitHub
+
+Every Gin handler takes two arguments
+
+    URL
+    Function handler with a gin.Context object
+
+This gin.Context object consists of information about headers, passed parameters, data posted, cookies, etc. It is also responsible in sending a response back to the client. In the above example, we are querying MySQL DB to get a person detail. We are using QueryRow which only returns one record if exists. Since id is a primary key, it only returns one record.
+
+gin.H is a map which actually has methods to serialize custom data we supply to it. It should be passed to c.JSON response instead of marshalling data. Gin will take care of that.
+
+Now in the similar way add one more GET for fetching all persons.
+	// GET all persons
+	router.GET("/persons", func(c *gin.Context) {
+		var (
+			person  Person
+			persons []Person
+		)
+		rows, err := db.Query("select id, first_name, last_name from person;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		for rows.Next() {
+			err = rows.Scan(&person.Id, &person.First_Name, &person.Last_Name)
+			persons = append(persons, person)
+			if err != nil {
+				fmt.Print(err.Error())
+			}
+		}
+		defer rows.Close()
+		c.JSON(http.StatusOK, gin.H{
+			"result": persons,
+			"count":  len(persons),
+		})
+	})
+view raw
+GET_all.go hosted with ❤ by GitHub
+
+Here we are applying Query method to fetch a cursor and iterating over it. Then we are storing them in a slice and returning back to the client in JSON form.
+
+Now let us defined the POST handler which is intersting.
+	// POST new person details
+	router.POST("/person", func(c *gin.Context) {
+		var buffer bytes.Buffer
+		first_name := c.PostForm("first_name")
+		last_name := c.PostForm("last_name")
+		stmt, err := db.Prepare("insert into person (first_name, last_name) values(?,?);")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(first_name, last_name)
+
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+
+		// Fastest way to append strings
+		buffer.WriteString(first_name)
+		buffer.WriteString(" ")
+		buffer.WriteString(last_name)
+		defer stmt.Close()
+		name := buffer.String()
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf(" %s successfully created", name),
+		})
+	})
+view raw
+POST_person.go hosted with ❤ by GitHub
+
+This code draws two points.
+
+    Why Prepare & Exec are used instead of Query?
+    Why Buffers are used for concatenating strings?
+
+For the actions like writing to DB where result is not cared, using Prepare and Execute is considered as the best practise. Using buffer instead of cancatenation operation gives performance boost. Now let us defined the other two handlers to complete our REST API.
+	// Delete resources
+	router.DELETE("/person", func(c *gin.Context) {
+		id := c.Query("id")
+		stmt, err := db.Prepare("delete from person where id= ?;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(id)
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Successfully deleted user: %s", id),
+		})
+	})
+view raw
+DELETE_person.go hosted with ❤ by GitHub
+	// PUT - update a person details
+	router.PUT("/person", func(c *gin.Context) {
+		var buffer bytes.Buffer
+		id := c.Query("id")
+		first_name := c.PostForm("first_name")
+		last_name := c.PostForm("last_name")
+		stmt, err := db.Prepare("update person set first_name= ?, last_name= ? where id= ?;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(first_name, last_name, id)
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+
+		// Fastest way to append strings
+		buffer.WriteString(first_name)
+		buffer.WriteString(" ")
+		buffer.WriteString(last_name)
+		defer stmt.Close()
+		name := buffer.String()
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Successfully updated to %s", name),
+		})
+	})
+view raw
+PUT_person.go hosted with ❤ by GitHub
+
+The code is self explanatory here. These two are same as POST handler with few changes in DB queries. Sprintf is commonly used to interpolate values into strings.
+
+The complete API server source looks like this.
+package main
+
+import (
+	"bytes"
+	"database/sql"
+	"fmt"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+)
+
+func main() {
+	db, err := sql.Open("mysql", "root:passapp@tcp(127.0.0.1:3306)/gotest")
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+	defer db.Close()
+	// make sure connection is available
+	err = db.Ping()
+	if err != nil {
+		fmt.Print(err.Error())
+	}
+	type Person struct {
+		Id         int
+		First_Name string
+		Last_Name  string
+	}
+	router := gin.Default()
+
+	// GET a person detail
+	router.GET("/person/:id", func(c *gin.Context) {
+		var (
+			person Person
+			result gin.H
+		)
+		id := c.Param("id")
+		row := db.QueryRow("select id, first_name, last_name from person where id = ?;", id)
+		err = row.Scan(&person.Id, &person.First_Name, &person.Last_Name)
+		if err != nil {
+			// If no results send null
+			result = gin.H{
+				"result": nil,
+				"count":  0,
+			}
+		} else {
+			result = gin.H{
+				"result": person,
+				"count":  1,
+			}
+		}
+		c.JSON(http.StatusOK, result)
+	})
+
+	// GET all persons
+	router.GET("/persons", func(c *gin.Context) {
+		var (
+			person  Person
+			persons []Person
+		)
+		rows, err := db.Query("select id, first_name, last_name from person;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		for rows.Next() {
+			err = rows.Scan(&person.Id, &person.First_Name, &person.Last_Name)
+			persons = append(persons, person)
+			if err != nil {
+				fmt.Print(err.Error())
+			}
+		}
+		defer rows.Close()
+		c.JSON(http.StatusOK, gin.H{
+			"result": persons,
+			"count":  len(persons),
+		})
+	})
+
+	// POST new person details
+	router.POST("/person", func(c *gin.Context) {
+		var buffer bytes.Buffer
+		first_name := c.PostForm("first_name")
+		last_name := c.PostForm("last_name")
+		stmt, err := db.Prepare("insert into person (first_name, last_name) values(?,?);")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(first_name, last_name)
+
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+
+		// Fastest way to append strings
+		buffer.WriteString(first_name)
+		buffer.WriteString(" ")
+		buffer.WriteString(last_name)
+		defer stmt.Close()
+		name := buffer.String()
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf(" %s successfully created", name),
+		})
+	})
+
+	// PUT - update a person details
+	router.PUT("/person", func(c *gin.Context) {
+		var buffer bytes.Buffer
+		id := c.Query("id")
+		first_name := c.PostForm("first_name")
+		last_name := c.PostForm("last_name")
+		stmt, err := db.Prepare("update person set first_name= ?, last_name= ? where id= ?;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(first_name, last_name, id)
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+
+		// Fastest way to append strings
+		buffer.WriteString(first_name)
+		buffer.WriteString(" ")
+		buffer.WriteString(last_name)
+		defer stmt.Close()
+		name := buffer.String()
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Successfully updated to %s", name),
+		})
+	})
+
+	// Delete resources
+	router.DELETE("/person", func(c *gin.Context) {
+		id := c.Query("id")
+		stmt, err := db.Prepare("delete from person where id= ?;")
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		_, err = stmt.Exec(id)
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message": fmt.Sprintf("Successfully deleted user: %s", id),
+		})
+	})
+	router.Run(":3000")
+}
+view raw
+gitter.go hosted with ❤ by GitHub
+REST API in action
+
+Now build the program and run it.
+
+$ go build gitter.go
+$ ./gitter
